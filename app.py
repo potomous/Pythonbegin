@@ -186,7 +186,7 @@ def tab_overview(df: pd.DataFrame, metric: str, banks: list):
         else:
             norm[col] = 0.5
 
-    text_vals = pivot.applymap(lambda v: f"{v:.1f}" if pd.notna(v) else "")
+    text_vals = pivot.map(lambda v: f"{v:.1f}" if pd.notna(v) else "")
 
     fig = go.Figure(
         go.Heatmap(
