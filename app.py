@@ -7,13 +7,15 @@ import numpy as np
 import streamlit as st
 
 from data_manager import (
+    DB_PATH,
     aggregate_annual,
     BANKS,
     COUNTRIES,
     COUNTRY_COLORS,
+    get_db_info,
+    load_or_generate,
     METRIC_CATEGORIES,
     METRICS,
-    generate_data,
 )
 
 # ---------------------------------------------------------------------------
@@ -55,9 +57,9 @@ def bank_color_map(banks):
 # Data loading (cached)
 # ---------------------------------------------------------------------------
 
-@st.cache_data(show_spinner="Generating bank data…")
+@st.cache_data(show_spinner="Loading bank data…")
 def load_data() -> pd.DataFrame:
-    return generate_data()
+    return load_or_generate()
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +108,27 @@ def render_sidebar(all_periods):
         else [m for m, v in METRICS.items() if v["cat"] == cat]
     )
     metric = st.sidebar.selectbox("Metric", avail_metrics, key="metric")
+
+    st.sidebar.markdown("---")
+
+    # Database status & refresh
+    st.sidebar.subheader("Database")
+    info = get_db_info()
+    if info:
+        st.sidebar.caption(
+            f"Last built: {info.get('generated_at', '—')}\n\n"
+            f"{info.get('row_count', '?')} rows · "
+            f"{info.get('banks', '?')} banks · "
+            f"{info.get('periods', '?')} periods"
+        )
+    else:
+        st.sidebar.caption("Database not yet created — will build on first load.")
+
+    if st.sidebar.button("🔄 Rebuild database", help="Delete cached DB and regenerate all data"):
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+        st.cache_data.clear()
+        st.rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.caption(

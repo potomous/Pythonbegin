@@ -1,10 +1,17 @@
 """
 European bank metrics data manager.
 Provides quarterly seed data (Q1 2019 – Q4 2025) based on publicly reported figures.
+Data is persisted in a local SQLite database so it is only generated once.
 """
+
+import sqlite3
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+DB_PATH = Path(__file__).parent / "data" / "bank_metrics.db"
 
 # ---------------------------------------------------------------------------
 # Bank catalogue
@@ -432,3 +439,72 @@ def aggregate_annual(df: pd.DataFrame) -> pd.DataFrame:
     out["Period"] = out["Year"].astype(str)
     out["Quarter"] = 0
     return out
+
+
+# ---------------------------------------------------------------------------
+# SQLite persistence
+# ---------------------------------------------------------------------------
+
+def _init_db(conn: sqlite3.Connection) -> None:
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS metrics (
+            bank     TEXT    NOT NULL,
+            country  TEXT    NOT NULL,
+            year     INTEGER NOT NULL,
+            quarter  INTEGER NOT NULL,
+            period   TEXT    NOT NULL,
+            metric   TEXT    NOT NULL,
+            value    REAL    NOT NULL,
+            PRIMARY KEY (bank, year, quarter, metric)
+        );
+        CREATE TABLE IF NOT EXISTS metadata (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+
+
+def save_to_db(df: pd.DataFrame, db_path: Path = DB_PATH) -> None:
+    """Write *df* to the SQLite database, replacing any existing data."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        _init_db(conn)
+        df.to_sql("metrics", conn, if_exists="replace", index=False)
+        conn.executemany(
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+            [
+                ("generated_at", datetime.now().isoformat(timespec="seconds")),
+                ("row_count", str(len(df))),
+                ("banks", str(df["Bank"].nunique())),
+                ("periods", str(df["Period"].nunique())),
+            ],
+        )
+
+
+def load_from_db(db_path: Path = DB_PATH) -> pd.DataFrame:
+    """Load all metric rows from the SQLite database."""
+    with sqlite3.connect(db_path) as conn:
+        return pd.read_sql("SELECT * FROM metrics ORDER BY bank, year, quarter, metric", conn)
+
+
+def get_db_info(db_path: Path = DB_PATH) -> dict:
+    """Return metadata dict from the database, or empty dict if DB does not exist."""
+    if not db_path.exists():
+        return {}
+    try:
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute("SELECT key, value FROM metadata").fetchall()
+            return dict(rows)
+    except sqlite3.DatabaseError:
+        return {}
+
+
+def load_or_generate(db_path: Path = DB_PATH) -> pd.DataFrame:
+    """Return data from DB if available, otherwise generate, save, and return."""
+    if db_path.exists():
+        info = get_db_info(db_path)
+        if info.get("row_count", "0") != "0":
+            return load_from_db(db_path)
+    df = generate_data()
+    save_to_db(df, db_path)
+    return df
