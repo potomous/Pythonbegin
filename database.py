@@ -17,8 +17,8 @@ class Base(DeclarativeBase):
 class Bond(Base):
     __tablename__ = "bonds"
 
-    id = Column(Integer, primary_key=True)
-    isin = Column(String(12), unique=True, nullable=False)
+    # ISIN is the natural primary key for a bond
+    isin = Column(String(12), primary_key=True)
     ticker = Column(String(20))
     issuer = Column(String(100), nullable=False)
     sector = Column(String(50))
@@ -40,14 +40,11 @@ class Bond(Base):
 
 
 class BondPrice(Base):
+    """Time-series table. Primary key is (date, isin)."""
     __tablename__ = "bond_prices"
-    __table_args__ = (
-        UniqueConstraint("bond_id", "date", name="uq_bond_date"),
-    )
 
-    id = Column(Integer, primary_key=True)
-    bond_id = Column(Integer, ForeignKey("bonds.id"), nullable=False)
-    date = Column(Date, nullable=False)
+    date = Column(Date, primary_key=True)
+    isin = Column(String(12), ForeignKey("bonds.isin"), primary_key=True)
     price = Column(Float)
     yield_pct = Column(Float)
     oas = Column(Float)
@@ -125,7 +122,7 @@ def get_bonds_df(session):
     sql = text(
         """
         SELECT
-            b.id, b.isin, b.ticker, b.issuer, b.sector, b.sub_sector,
+            b.isin, b.ticker, b.issuer, b.sector, b.sub_sector,
             b.composite_rating, b.country_of_risk, b.currency,
             b.coupon, b.maturity_date, b.maturity_bucket,
             b.issue_size_mm, b.seniority,
@@ -133,9 +130,9 @@ def get_bonds_df(session):
             p.z_spread, p.spread_benchmark, p.spread_itraxx,
             p.spread_cdx, p.spread_duration, p.country_spread
         FROM bonds b
-        LEFT JOIN bond_prices p ON p.bond_id = b.id
+        LEFT JOIN bond_prices p ON p.isin = b.isin
             AND p.date = (
-                SELECT MAX(p2.date) FROM bond_prices p2 WHERE p2.bond_id = b.id
+                SELECT MAX(p2.date) FROM bond_prices p2 WHERE p2.isin = b.isin
             )
         ORDER BY b.sector, b.composite_rating, b.issuer
         """
@@ -143,34 +140,34 @@ def get_bonds_df(session):
     return pd.read_sql(sql, session.bind)
 
 
-def get_price_history_df(session, bond_ids=None):
-    """Return time-series price data for given bond IDs (all if None)."""
+def get_price_history_df(session, isins=None):
+    """Return time-series price data for given ISINs (all bonds if None)."""
     import pandas as pd
     from sqlalchemy import text
 
-    if bond_ids:
-        placeholders = ",".join(str(x) for x in bond_ids)
+    if isins:
+        placeholders = ",".join(f"'{i}'" for i in isins)
         sql = text(
             f"""
-            SELECT b.id AS bond_id, b.isin, b.ticker, b.issuer,
+            SELECT b.isin, b.ticker, b.issuer,
                    b.sector, b.sub_sector, b.composite_rating, b.country_of_risk,
                    p.date, p.yield_pct, p.oas, p.z_spread,
                    p.spread_benchmark, p.spread_itraxx, p.spread_cdx,
                    p.spread_duration, p.country_spread
-            FROM bonds b JOIN bond_prices p ON p.bond_id = b.id
-            WHERE b.id IN ({placeholders})
+            FROM bonds b JOIN bond_prices p ON p.isin = b.isin
+            WHERE b.isin IN ({placeholders})
             ORDER BY p.date
             """
         )
     else:
         sql = text(
             """
-            SELECT b.id AS bond_id, b.isin, b.ticker, b.issuer,
+            SELECT b.isin, b.ticker, b.issuer,
                    b.sector, b.sub_sector, b.composite_rating, b.country_of_risk,
                    p.date, p.yield_pct, p.oas, p.z_spread,
                    p.spread_benchmark, p.spread_itraxx, p.spread_cdx,
                    p.spread_duration, p.country_spread
-            FROM bonds b JOIN bond_prices p ON p.bond_id = b.id
+            FROM bonds b JOIN bond_prices p ON p.isin = b.isin
             ORDER BY p.date
             """
         )

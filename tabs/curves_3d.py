@@ -113,8 +113,8 @@ def _fetch(sector, rating, days):
         if bonds_df.empty:
             return pd.DataFrame(), pd.DataFrame()
 
-        bond_ids = bonds_df["id"].tolist()
-        history = get_price_history_df(session, bond_ids)
+        isins = bonds_df["isin"].tolist()
+        history = get_price_history_df(session, isins)
 
         if sector != "ALL":
             history = history[history["sector"] == sector]

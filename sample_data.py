@@ -261,7 +261,6 @@ def load_sample_data():
                 seniority=bd["sen"],
             )
             session.add(b)
-            session.flush()
 
             base_oas = RATING_BASE_OAS.get(bd["rating"], 150)
             ctry_prem = COUNTRY_SPREAD.get(bd["country"], 50)
@@ -288,8 +287,8 @@ def load_sample_data():
                 yld = float(base_yld[i])
                 sd = _spread_duration(bd["mat"], d)
                 bp = BondPrice(
-                    bond_id=b.id,
                     date=d,
+                    isin=b.isin,
                     price=round(100 - (yld - bd["cpn"]) * sd * 100, 4),
                     yield_pct=round(yld, 4),
                     oas=round(oas, 2),

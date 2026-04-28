@@ -353,13 +353,12 @@ def handle_modal(open_n, close_n, save_n, is_open,
                 seniority=seniority,
             )
             session.add(bond)
-            session.flush()
 
             price_fields = [oas, yld, zsprd, bmsprd, itraxx, cdx, sdur, ctry]
             if any(f is not None for f in price_fields):
                 bp = BondPrice(
-                    bond_id=bond.id,
                     date=date.today(),
+                    isin=bond.isin,
                     oas=float(oas) if oas else None,
                     yield_pct=float(yld) if yld else None,
                     z_spread=float(zsprd) if zsprd else None,
