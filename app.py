@@ -140,4 +140,4 @@ def update_status(_n):
 # ── entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8050)
+    app.run(debug=False, host="0.0.0.0", port=8050, use_reloader=False)
