@@ -1,7 +1,5 @@
-"""Bond Universe tab — filterable table + add-bond modal + CSV upload."""
+"""Bond Universe tab — filterable bond table + add-bond modal."""
 
-import base64
-import io
 from datetime import date, datetime
 
 import pandas as pd
@@ -208,21 +206,13 @@ layout = html.Div([
     _filter_bar(),
     dbc.Row([
         dbc.Col(html.Span(id="univ-count",
-                          style={"fontSize": "11px", "color": "#aaa"}), width=6),
+                          style={"fontSize": "11px", "color": "#aaa"}), width=10),
         dbc.Col(
-            dcc.Upload(
-                id="upload-bonds-csv",
-                children=html.Span(["Drag & Drop or ", html.A("Select CSV")],
-                                   style={"fontSize": "11px", "color": ACCENT}),
-                style={"border": f"1px dashed {GRID_CLR}", "borderRadius": "4px",
-                       "padding": "4px 12px", "cursor": "pointer",
-                       "backgroundColor": CARD_BG},
-                multiple=False,
-            ), width=6, className="d-flex justify-content-end",
+            html.Small("Use the Data Import tab to upload files with field mapping.",
+                       style={"color": "#555", "fontSize": "10px"}),
+            width=2, className="d-flex align-items-center justify-content-end",
         ),
     ], className="mb-2"),
-    html.Div(id="csv-upload-status",
-             style={"fontSize": "11px", "color": POS_CLR, "marginBottom": "4px"}),
     _bond_table(),
     _add_bond_modal(),
     dcc.Store(id="universe-refresh", data=0),
@@ -402,74 +392,3 @@ def load_sample(n_clicks, refresh_cnt):
     )
     return toast, (refresh_cnt or 0) + 1
 
-
-@callback(
-    Output("csv-upload-status", "children"),
-    Output("universe-refresh", "data", allow_duplicate=True),
-    Input("upload-bonds-csv", "contents"),
-    State("upload-bonds-csv", "filename"),
-    State("universe-refresh", "data"),
-    prevent_initial_call=True,
-)
-def upload_csv(contents, filename, refresh_cnt):
-    if not contents:
-        return no_update, no_update
-
-    _content_type, content_string = contents.split(",")
-    decoded = base64.b64decode(content_string)
-    try:
-        df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
-    except Exception as e:
-        return f"Could not parse CSV: {e}", refresh_cnt
-
-    required = {"isin", "issuer"}
-    missing = required - set(df.columns.str.lower())
-    if missing:
-        return f"CSV missing required columns: {missing}", refresh_cnt
-
-    df.columns = df.columns.str.lower().str.strip()
-    session = get_session()
-    added = 0
-    errors = []
-    try:
-        for _, row in df.iterrows():
-            isin = str(row.get("isin", "")).strip().upper()
-            if not isin:
-                continue
-            existing = session.query(Bond).filter_by(isin=isin).first()
-            if existing:
-                continue
-            try:
-                mat_date = (pd.to_datetime(row["maturity_date"]).date()
-                            if "maturity_date" in row and pd.notna(row["maturity_date"])
-                            else None)
-                bond = Bond(
-                    isin=isin,
-                    ticker=str(row.get("ticker", "")),
-                    issuer=str(row.get("issuer", isin)),
-                    sector=str(row.get("sector", "")),
-                    sub_sector=str(row.get("sub_sector", "")),
-                    composite_rating=str(row.get("composite_rating", row.get("rating", ""))),
-                    country_of_risk=str(row.get("country_of_risk", row.get("country", ""))),
-                    currency=str(row.get("currency", "EUR")),
-                    coupon=float(row["coupon"]) if "coupon" in row and pd.notna(row["coupon"]) else None,
-                    maturity_date=mat_date,
-                    maturity_bucket=get_maturity_bucket(mat_date) if mat_date else None,
-                    issue_size_mm=float(row["issue_size_mm"]) if "issue_size_mm" in row and pd.notna(row["issue_size_mm"]) else None,
-                    seniority=str(row.get("seniority", "")),
-                )
-                session.add(bond)
-                added += 1
-            except Exception as e:
-                errors.append(str(e))
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        return f"DB error: {e}", refresh_cnt
-    finally:
-        session.close()
-
-    msg = f"Imported {added} bonds from {filename}."
-    if errors:
-        msg += f" {len(errors)} row(s) skipped."
-    return msg, (refresh_cnt or 0) + 1

@@ -32,6 +32,7 @@ import tabs.universe as universe_tab   # noqa: E402
 import tabs.rv_curves as rv_tab        # noqa: E402
 import tabs.curves_3d as c3d_tab       # noqa: E402
 import tabs.new_issue as ni_tab        # noqa: E402
+import tabs.upload as upload_tab       # noqa: E402
 
 # ── layout ─────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,11 @@ _TABS = dbc.Tabs(
         dbc.Tab(ni_tab.layout,
                 label="New Issue Pricing",
                 tab_id="tab-ni",
+                label_style={"fontSize": "12px"},
+                active_label_style={"color": ACCENT, "fontSize": "12px"}),
+        dbc.Tab(upload_tab.layout,
+                label="Data Import",
+                tab_id="tab-upload",
                 label_style={"fontSize": "12px"},
                 active_label_style={"color": ACCENT, "fontSize": "12px"}),
     ],
